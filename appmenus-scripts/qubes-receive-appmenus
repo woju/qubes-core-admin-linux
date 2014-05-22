@@ -99,7 +99,7 @@ def sanitise_categories(untrusted_value):
     return ';'.join(categories) + ';'
 
 def fallback_hvm_appmenulist():
-    p = subprocess.Popen(["grep",  "-rH", "=", "/usr/share/qubes-appmenus/hvm"],
+    p = subprocess.Popen(["/bin/grep",  "-rH", "=", "/usr/share/qubes-appmenus/hvm"],
             stdout=subprocess.PIPE)
     (stdout, stderr) = p.communicate()
     return stdout.splitlines()
