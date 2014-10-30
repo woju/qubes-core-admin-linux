@@ -671,9 +671,9 @@ int main(int argc, char **argv)
 		fprintf(stderr, "usage: %s [-q] domainid domain-name [default user]\n", argv[0]);
 		exit(1);
 	}
-	remote_domain_name = argv[optind+1];
-	if (argc - optind >= 3)
-		default_user = argv[optind+2];
+	remote_domain_name = argv[optind];
+	if (argc - optind >= 2)
+		default_user = argv[optind+1];
 	remote_domain_xid = atoi(argv[optind]);
 	init(remote_domain_xid);
 	sigemptyset(&chld_set);
