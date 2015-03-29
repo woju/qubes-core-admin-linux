@@ -268,55 +268,65 @@ static void send_exit_code(libvchan_t *vchan, int status)
 static void handle_input(libvchan_t *vchan)
 {
     char buf[MAX_DATA_CHUNK];
-    int ret;
+    int ret, len;
     struct msg_header hdr;
 
-    ret = read(local_stdout_fd, buf, sizeof(buf));
-    if (ret < 0) {
-        perror("read");
-        do_exit(1);
-    }
-    hdr.type = is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN;
-    hdr.len = ret;
-    if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        fprintf(stderr, "Failed to write STDIN data to the agent\n");
-        do_exit(1);
-    }
-    if (ret == 0) {
-        close(local_stdout_fd);
-        local_stdout_fd = -1;
-        if (local_stdin_fd == -1) {
-            // if not a remote end of service call, wait for exit status
-            if (is_service) {
-                // if pipe in opposite direction already closed, no need to stay alive
-                if (local_pid == 0) {
-                    /* if this is "remote" service end and no real local process
-                     * exists (using own stdin/out) send also fake exit code */
-                    send_exit_code(vchan, 0);
-                    do_exit(0);
-                }
+    while (libvchan_buffer_space(vchan) > (int)sizeof(struct msg_header)) {
+        len = libvchan_buffer_space(vchan)-sizeof(struct msg_header);
+        if (len > (int)sizeof(buf))
+            len = sizeof(buf);
+
+        ret = read(local_stdout_fd, buf, sizeof(buf));
+        if (ret < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+            else {
+                perror("read");
+                do_exit(1);
             }
         }
-    }
-    if (!write_vchan_all(vchan, buf, ret)) {
-        if (!libvchan_is_open(vchan)) {
-            // agent disconnected its end of socket, so no future data will be
-            // send there; there is no sense to read from child stdout
-            //
-            // since vchan socket is buffered it doesn't mean all data was
-            // received from the agent
+        hdr.type = is_service ? MSG_DATA_STDOUT : MSG_DATA_STDIN;
+        hdr.len = ret;
+        if (libvchan_send(vchan, &hdr, sizeof(hdr)) != sizeof(hdr)) {
+            fprintf(stderr, "Failed to write STDIN data to the agent\n");
+            do_exit(1);
+        }
+        if (ret == 0) {
             close(local_stdout_fd);
             local_stdout_fd = -1;
             if (local_stdin_fd == -1) {
-                // since child does no longer accept data on its stdin, doesn't
-                // make sense to process the data from the daemon
-                //
-                // we don't know real exit VM process code (exiting here, before
-                // MSG_DATA_EXIT_CODE message)
-                do_exit(1);
+                // if not a remote end of service call, wait for exit status
+                if (is_service) {
+                    // if pipe in opposite direction already closed, no need to stay alive
+                    if (local_pid == 0) {
+                        /* if this is "remote" service end and no real local process
+                         * exists (using own stdin/out) send also fake exit code */
+                        send_exit_code(vchan, 0);
+                        do_exit(0);
+                    }
+                }
             }
-        } else
-            perror("write agent");
+        }
+        if (!write_vchan_all(vchan, buf, ret)) {
+            if (!libvchan_is_open(vchan)) {
+                // agent disconnected its end of socket, so no future data will be
+                // send there; there is no sense to read from child stdout
+                //
+                // since vchan socket is buffered it doesn't mean all data was
+                // received from the agent
+                close(local_stdout_fd);
+                local_stdout_fd = -1;
+                if (local_stdin_fd == -1) {
+                    // since child does no longer accept data on its stdin, doesn't
+                    // make sense to process the data from the daemon
+                    //
+                    // we don't know real exit VM process code (exiting here, before
+                    // MSG_DATA_EXIT_CODE message)
+                    do_exit(1);
+                }
+            } else
+                perror("write agent");
+        }
     }
 }
 
@@ -420,6 +430,7 @@ static void select_loop(libvchan_t *vchan)
     sigaddset(&selectmask, SIGCHLD);
     sigprocmask(SIG_BLOCK, &selectmask, NULL);
     sigemptyset(&selectmask);
+    set_nonblock(local_stdout_fd);
 
     for (;;) {
         vchan_fd = libvchan_fd_for_select(vchan);
