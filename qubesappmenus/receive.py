@@ -386,5 +386,3 @@ def main():
             subprocess.call(['kbuildsycoca4'])
         os.unsetenv('SKIP_CACHE_REBUILD')
 
-
-main()
