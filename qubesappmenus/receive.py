@@ -386,5 +386,3 @@ def main():
             subprocess.call(['kbuildsycoca' + os.environ.get('KDE_SESSION_VERSION', '4')])
         os.unsetenv('SKIP_CACHE_REBUILD')
 
-
-main()
